@@ -2,7 +2,7 @@ import evaluate
 import numpy as np
 from datasets import load_dataset
 from peft import LoraConfig, TaskType
-from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING as target_modules_mapping
+from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING as TARGET_MODULES_MAPPING
 from torch.optim import AdamW
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, DataCollatorWithPadding
 
@@ -13,13 +13,13 @@ checkpoint = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
 
-sst2_datasets_t = load_dataset("sst2", split="train[:5%]")
-rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:20%]")
-imdb_datasets_t = load_dataset("imdb", split="train[:10%]")
+sst2_datasets_t = load_dataset("sst2", split="train[:2%]")
+rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:8%]")
+imdb_datasets_t = load_dataset("imdb", split="train[:4%]")
 
-sst2_datasets_v = load_dataset("sst2", split="validation[:10%]")
-rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:10%]")
-imdb_datasets_v = load_dataset("imdb", split="test[:10%]")
+sst2_datasets_v = load_dataset("sst2", split="validation[:5%]")
+rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:5%]")
+imdb_datasets_v = load_dataset("imdb", split="test[:2%]")
 
 
 def tokenize_function(examples):
@@ -67,7 +67,7 @@ data_collator = DataCollatorWithPadding(tokenizer)
 lora_config = LoraConfig(
     r=8,
     lora_alpha=16,
-    target_modules=target_modules_mapping.get("bert").append("classifier"),
+    target_modules=TARGET_MODULES_MAPPING.get("bert").append("classifier"),
     lora_dropout=0.06,
     bias="none",
     task_type=TaskType.SEQ_CLS,

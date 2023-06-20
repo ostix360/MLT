@@ -56,16 +56,13 @@ class MLTrainer:
         self.c_eval_dataset = None
         self.c_train_dataset = None
 
-    def load_model(self, loras_to_add: list, train: bool = False):
-        self.model.disable_adapter()
-        for lora in loras_to_add:
+    def load_model(self, train: bool = False):
+        self.model.peft_config.clear()
+        for lora in self.loras:
             self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora, is_trainable=train)
 
     def load_MLModel(self):
-        if not isinstance(self.model, PeftModel) and len(self.loras) == 0:  # create useless Lora?
-            self.model: PeftModel = PeftModel(self.model, self.lora_config,
-                                              list(self.train_dataset.keys())[0])  # get_peft_model(model, lora_config)
-        elif len(self.loras) > 0:
+        if len(self.loras) > 0:
             if not isinstance(self.model, PeftModel):
                 self.model = PeftModel.from_pretrained(self.model, Path(f"{self.save_dir}/{self.loras[0]}"),
                                                        self.loras[0])
@@ -73,11 +70,19 @@ class MLTrainer:
                 self.model.load_adapter(Path(f"{self.save_dir}/{self.loras[0]}"), self.loras[0])
             for lora in self.loras[1:]:
                 self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora)
+        elif not isinstance(self.model, PeftModel):  # create useless Lora?
+            lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
+            self.model: PeftModel = PeftModel(self.model, self.lora_config, lora_name)
+            self.loras.append(lora_name)
+            return True
+            # get_peft_model(model, lora_config)
 
-    def finetune(self): # TODO add removed dataset to train in train_loras
+        return False
+
+    def finetune(self):     # TODO add removed dataset to train in train_loras
         print("Finetuning")
-        train_ds = self.train_dataset.pop(list(self.train_dataset.keys())[0])
-        eval_ds = self.eval_dataset.pop(list(self.eval_dataset.keys())[0])
+        train_ds = list(self.train_dataset.values())[0]
+        eval_ds = list(self.eval_dataset.values())[0]
         trainer = Trainer(
             model=self.model,
             args=self.training_args,
@@ -93,38 +98,49 @@ class MLTrainer:
 
     def train(self):
         print("Starting training")
+        j = 0
+        previous_ds = []
         if self.finetune_first:
             self.finetune()
-        previous_lora = []
-        self.load_MLModel()
-        for lora_name in self.train_dataset.keys():
-            train_ds = self.train_dataset[lora_name]
-            eval_ds = self.eval_dataset[lora_name]
-            self.load_model(previous_lora)
-            self.model.add_adapter(lora_name, self.lora_config)
-            self.__train_lora(train_ds, eval_ds, lora_name=lora_name)
-            self.model.save_pretrained(f"{self.save_dir}")
-            self.loras.append(lora_name)
-            previous_lora.append(lora_name)
-            self.__train_loras(loras=previous_lora)
+            j = 1
+        pefted = self.load_MLModel()
+        if pefted:
+            self.load_model(True)
+        for i in range(j, len(self.train_dataset)):
+            ds_name = list(self.train_dataset.keys())[i]
+            train_ds = self.train_dataset[ds_name]
+            eval_ds = self.eval_dataset[ds_name]
+            if not pefted:
+                self.model.add_adapter(ds_name, self.lora_config)
+                self.model.set_adapter(ds_name)
+
+            self.train_lora(train_ds, eval_ds, lora_name=ds_name)
+            self.model.save_pretrained(f"{self.save_dir}")  # TODO check peft config with multiple loras
+            if not pefted:
+                self.loras.append(ds_name)
+            previous_ds.append(ds_name)
+            self.train_loras(ds=previous_ds)
+            pefted = False
+            self.load_model()
+
         print("Training finished")
 
     def custom_train(self, trainer):
         print("Processing datasets")
         self.process_datasets()
         print("Starting training")
-        previous_lora = []
+        ds_lora = []
         self.load_MLModel()
         for lora_name in self.train_dataset.keys():
             train_ds = self.c_train_dataset[lora_name]
             eval_ds = self.c_eval_dataset[lora_name]
-            self.load_model(previous_lora)
+            self.load_model()
             self.model.add_adapter(lora_name, self.lora_config)
-            self.__train_lora(train_ds, eval_ds, lora_name=lora_name, trainer=trainer)
+            self.train_lora(train_ds, eval_ds, lora_name=lora_name, trainer=trainer)
             self.model.save_pretrained(f"{self.save_dir}")  # TODO check peft config with multiple loras
             self.loras.append(lora_name)
-            previous_lora.append(lora_name)
-            self.__train_loras(loras=previous_lora, trainer=trainer)
+            ds_lora.append(lora_name)
+            self.train_loras(ds=ds_lora, trainer=trainer)
         print("Training finished")
 
     def process_datasets(self):
@@ -145,7 +161,7 @@ class MLTrainer:
             for k, v in self.eval_dataset.items()
         }
 
-    def __train_lora(self, train_ds, eval_ds, lora_name, trainer=None):
+    def train_lora(self, train_ds, eval_ds, lora_name, trainer=None):
         print(f"Training {lora_name}")
         self.model.print_trainable_parameters()
         if trainer is None:
@@ -165,10 +181,10 @@ class MLTrainer:
         else:
             trainer(self.model, train_ds, eval_ds)
 
-    def __train_loras(self, loras, trainer=None):
+    def train_loras(self, ds, trainer=None):
         print("preparing datasets")
-        train_ds = concatenate_datasets([self.train_dataset[lora_name] for lora_name in loras]) # Take a part
-        eval_ds = concatenate_datasets([self.eval_dataset[lora_name] for lora_name in loras])
+        train_ds = concatenate_datasets([self.train_dataset[ds_name] for ds_name in ds])   # TODO Take a part
+        eval_ds = concatenate_datasets([self.eval_dataset[ds_name] for ds_name in ds])
         train_ds.shuffle()
         eval_ds.shuffle()
         if trainer is not None:
@@ -178,6 +194,6 @@ class MLTrainer:
             eval_ds = DataLoader(
                 eval_ds, batch_size=self.training_args.per_device_eval_batch_size, collate_fn=self.data_collator,
             )
-        self.load_model(loras, train=True)
-        self.__train_lora(train_ds, eval_ds, " + ".join(loras), trainer=trainer)
+        self.load_model(train=True)
+        self.train_lora(train_ds, eval_ds, " + ".join(ds), trainer=trainer)
         self.model.save_pretrained(f"{self.save_dir}")
