@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trai
 import utils
 from MLTrainer import MLTrainer
 
-checkpoint = "bert-base-uncased"
+checkpoint = "./test_trainer"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
 
@@ -52,7 +52,7 @@ test_ds = {"sst2": sst2_datasets_v.rename_column("label", "labels").remove_colum
            "rotten_tomatoes": rotten_tomatoes_datasets_v.rename_column("label", "labels").remove_columns(["text"]),
            "imdb": imdb_datasets_v.rename_column("label", "labels").remove_columns(["text"])}
 
-training_args = TrainingArguments("test_trainer",
+training_args = TrainingArguments("./test_trainer",
                                   logging_steps=20,
                                   num_train_epochs=1,
                                   remove_unused_columns=False,
@@ -67,8 +67,9 @@ data_collator = DataCollatorWithPadding(tokenizer)
 lora_config = LoraConfig(
     r=8,
     lora_alpha=16,
-    target_modules=TARGET_MODULES_MAPPING.get("bert").append("classifier"),
+    target_modules=TARGET_MODULES_MAPPING.get("bert"),
     lora_dropout=0.06,
+    modules_to_save=["classifier", "score"],
     bias="none",
     task_type=TaskType.SEQ_CLS,
 )
@@ -96,4 +97,4 @@ def train(model, train_dataloader, eval_dataloader):
 
 
 # trainer.custom_train(train)
-# trainer.train()
+trainer.train()

@@ -1,13 +1,14 @@
-import copy
 from pathlib import Path
 from typing import Optional, Callable, Dict, Tuple
-from operator import itemgetter
 
 import torch
 from datasets import concatenate_datasets
-from peft import LoraConfig, PeftModel
+from peft import LoraConfig, PeftModel, prepare_model_for_int8_training, \
+    MODEL_TYPE_TO_PEFT_MODEL_MAPPING, PromptLearningConfig
+from peft.utils.other import _freeze_adapter, _set_trainable, _get_submodules, ModulesToSaveWrapper
+from peft.mapping import _prepare_prompt_learning_config
 from torch.utils.data import DataLoader
-from transformers import TrainingArguments, DataCollator, PreTrainedTokenizer, Trainer, EvalPrediction, \
+from transformers import TrainingArguments, DataCollator, Trainer, EvalPrediction, \
     PreTrainedTokenizerBase
 
 
@@ -57,29 +58,32 @@ class MLTrainer:
         self.c_train_dataset = None
 
     def load_model(self, train: bool = False):
-        self.model.peft_config.clear()
         for lora in self.loras:
             self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora, is_trainable=train)
+            if train:
+                unfreeze_adapter(self.model, lora)
+            else:
+                _freeze_adapter(self.model, lora)
 
     def load_MLModel(self):
         if len(self.loras) > 0:
             if not isinstance(self.model, PeftModel):
                 self.model = PeftModel.from_pretrained(self.model, Path(f"{self.save_dir}/{self.loras[0]}"),
-                                                       self.loras[0])
+                                                       adapter_name=self.loras[0])
             else:
                 self.model.load_adapter(Path(f"{self.save_dir}/{self.loras[0]}"), self.loras[0])
             for lora in self.loras[1:]:
                 self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora)
         elif not isinstance(self.model, PeftModel):  # create useless Lora?
             lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
-            self.model: PeftModel = PeftModel(self.model, self.lora_config, lora_name)
+            self.model: PeftModel = get_peft_model(self.model, self.lora_config, lora_name)
             self.loras.append(lora_name)
             return True
             # get_peft_model(model, lora_config)
 
         return False
 
-    def finetune(self):     # TODO add removed dataset to train in train_loras
+    def finetune(self):  # TODO add removed dataset to train in train_loras
         print("Finetuning")
         train_ds = list(self.train_dataset.values())[0]
         eval_ds = list(self.eval_dataset.values())[0]
@@ -95,6 +99,8 @@ class MLTrainer:
         )
         trainer.train()
         trainer.evaluate()
+        trainer.save_model(f"{self.save_dir}")
+        self.model.name_or_path = f"{self.save_dir}"
 
     def train(self):
         print("Starting training")
@@ -104,14 +110,13 @@ class MLTrainer:
             self.finetune()
             j = 1
         pefted = self.load_MLModel()
-        if pefted:
-            self.load_model(True)
         for i in range(j, len(self.train_dataset)):
             ds_name = list(self.train_dataset.keys())[i]
             train_ds = self.train_dataset[ds_name]
             eval_ds = self.eval_dataset[ds_name]
             if not pefted:
                 self.model.add_adapter(ds_name, self.lora_config)
+                set_additional_trainable_modules(self.model, ds_name)
                 self.model.set_adapter(ds_name)
 
             self.train_lora(train_ds, eval_ds, lora_name=ds_name)
@@ -172,7 +177,6 @@ class MLTrainer:
                 eval_dataset=eval_ds,
                 data_collator=self.data_collator,
                 tokenizer=self.tokenizer,
-
                 compute_metrics=self.compute_metrics,
                 optimizers=self.optimizers
             )
@@ -183,7 +187,7 @@ class MLTrainer:
 
     def train_loras(self, ds, trainer=None):
         print("preparing datasets")
-        train_ds = concatenate_datasets([self.train_dataset[ds_name] for ds_name in ds])   # TODO Take a part
+        train_ds = concatenate_datasets([self.train_dataset[ds_name] for ds_name in ds])  # TODO Take a part
         eval_ds = concatenate_datasets([self.eval_dataset[ds_name] for ds_name in ds])
         train_ds.shuffle()
         eval_ds.shuffle()
@@ -197,3 +201,51 @@ class MLTrainer:
         self.load_model(train=True)
         self.train_lora(train_ds, eval_ds, " + ".join(ds), trainer=trainer)
         self.model.save_pretrained(f"{self.save_dir}")
+
+
+def get_peft_model(model, peft_config, adapter_name):
+    """
+    Returns a Peft model object from a model and a config.
+
+    Args:
+        model ([`transformers.PreTrainedModel`]): Model to be wrapped.
+        peft_config ([`PeftConfig`]): Configuration object containing the parameters of the Peft model.
+        adapter_name ([str]): Name of the adapter to be used.
+    """
+    model_config = model.config.to_dict() if hasattr(model.config, "to_dict") else model.config
+    peft_config.base_model_name_or_path = model.__dict__.get("name_or_path", None)
+    if peft_config.task_type not in MODEL_TYPE_TO_PEFT_MODEL_MAPPING.keys() and not isinstance(
+            peft_config, PromptLearningConfig
+    ):
+        return PeftModel(model, peft_config)
+    if isinstance(peft_config, PromptLearningConfig):
+        peft_config = _prepare_prompt_learning_config(peft_config, model_config)
+    return MODEL_TYPE_TO_PEFT_MODEL_MAPPING[peft_config.task_type](model, peft_config, adapter_name=adapter_name)
+
+
+def unfreeze_adapter(model, adapter_name):
+    """
+    Unfreezes an adapter.
+
+    Args:
+        model ([`transformers.PreTrainedModel`]): Model to be unfreezed.
+        adapter_name ([str]): Name of the adapter to be unfreezed.
+    """
+    for n, p in model.named_parameters():
+        if adapter_name in n:
+            p.requires_grad = True
+
+
+def set_additional_trainable_modules(model, lora_name):
+    key_list = [key for key, _ in model.named_modules()]
+    for key in key_list:
+        target_module_found = any(key.endswith(target_key) for target_key in model.modules_to_save)
+        if target_module_found:
+            parent, target, target_name = _get_submodules(model, key)
+            if isinstance(target, ModulesToSaveWrapper):
+                target.update(lora_name)
+
+            for param in target.parameters():
+                param.requires_grad = True
+            setattr(parent, target_name, ModulesToSaveWrapper(target, lora_name))
+
