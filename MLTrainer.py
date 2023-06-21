@@ -70,10 +70,13 @@ class MLTrainer:
             if not isinstance(self.model, PeftModel):
                 self.model = PeftModel.from_pretrained(self.model, Path(f"{self.save_dir}/{self.loras[0]}"),
                                                        adapter_name=self.loras[0])
+
             else:
                 self.model.load_adapter(Path(f"{self.save_dir}/{self.loras[0]}"), self.loras[0])
+            set_additional_trainable_modules(self.model, self.loras[0])
             for lora in self.loras[1:]:
                 self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora)
+                set_additional_trainable_modules(self.model, lora)
         elif not isinstance(self.model, PeftModel):  # create useless Lora?
             lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
             self.model: PeftModel = get_peft_model(self.model, self.lora_config, lora_name)
@@ -120,7 +123,7 @@ class MLTrainer:
                 self.model.set_adapter(ds_name)
 
             self.train_lora(train_ds, eval_ds, lora_name=ds_name)
-            self.model.save_pretrained(f"{self.save_dir}")  # TODO check peft config with multiple loras
+            self.model.save_pretrained(f"{self.save_dir}")
             if not pefted:
                 self.loras.append(ds_name)
             previous_ds.append(ds_name)
@@ -134,18 +137,30 @@ class MLTrainer:
         print("Processing datasets")
         self.process_datasets()
         print("Starting training")
-        ds_lora = []
-        self.load_MLModel()
-        for lora_name in self.train_dataset.keys():
-            train_ds = self.c_train_dataset[lora_name]
-            eval_ds = self.c_eval_dataset[lora_name]
+        j = 0
+        previous_ds = []
+        if self.finetune_first:
+            self.finetune()
+            j = 1
+        print("Starting training")
+        pefted = self.load_MLModel()
+        for i in range(j, len(self.train_dataset)):
+            ds_name = list(self.train_dataset.keys())[i]
+            train_ds = self.c_train_dataset[ds_name]
+            eval_ds = self.c_eval_dataset[ds_name]
+            if not pefted:
+                self.model.add_adapter(ds_name, self.lora_config)
+                set_additional_trainable_modules(self.model, ds_name)
+                self.model.set_adapter(ds_name)
+
+            self.train_lora(train_ds, eval_ds, lora_name=ds_name, trainer=trainer)
+            self.model.save_pretrained(f"{self.save_dir}")
+            if not pefted:
+                self.loras.append(ds_name)
+            previous_ds.append(ds_name)
+            self.train_loras(ds=previous_ds, trainer=trainer)
+            pefted = False
             self.load_model()
-            self.model.add_adapter(lora_name, self.lora_config)
-            self.train_lora(train_ds, eval_ds, lora_name=lora_name, trainer=trainer)
-            self.model.save_pretrained(f"{self.save_dir}")  # TODO check peft config with multiple loras
-            self.loras.append(lora_name)
-            ds_lora.append(lora_name)
-            self.train_loras(ds=ds_lora, trainer=trainer)
         print("Training finished")
 
     def process_datasets(self):

@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trai
 import utils
 from MLTrainer import MLTrainer
 
-checkpoint = "./test_trainer"
+checkpoint = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
 
@@ -92,9 +92,9 @@ def train(model, train_dataloader, eval_dataloader):
     num_epochs = 1
     model.to(device)
     lr_scheduler, num_training_steps = utils.get_lr_scheduler(optimizer, train_dataloader, num_epochs)
-    # utils.train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
+    utils.train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
     utils.evaluate_model(model, eval_dataloader, device)
 
 
-# trainer.custom_train(train)
-trainer.train()
+trainer.custom_train(train)
+# trainer.train()
