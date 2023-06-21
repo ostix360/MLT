@@ -43,6 +43,7 @@ class MLTrainer:
             raise ValueError("train_dataset and eval_dataset must be of the same length")
 
         self.model = model
+        self.original_model = model
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.training_args = training_args
@@ -58,12 +59,13 @@ class MLTrainer:
         self.c_train_dataset = None
 
     def load_model(self, train: bool = False):
+        del self.model
+        torch.cuda.empty_cache()
+        self.model = self.original_model
         for lora in self.loras:
-            self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora, is_trainable=train)
-            if train:
-                unfreeze_adapter(self.model, lora)
-            else:
-                _freeze_adapter(self.model, lora)
+            self.model = PeftModel.from_pretrained(self.model, Path(f"{self.save_dir}/{lora}"),
+                                                   adapter_name=lora, is_trainable=train)
+            set_additional_trainable_modules(self.model, lora)
 
     def load_MLModel(self):
         if len(self.loras) > 0:
@@ -101,6 +103,7 @@ class MLTrainer:
         trainer.evaluate()
         trainer.save_model(f"{self.save_dir}")
         self.model.name_or_path = f"{self.save_dir}"
+        self.original_model = self.model
 
     def train(self):
         print("Starting training")
@@ -115,19 +118,18 @@ class MLTrainer:
             train_ds = self.train_dataset[ds_name]
             eval_ds = self.eval_dataset[ds_name]
             if not pefted:
-                self.model.add_adapter(ds_name, self.lora_config)
+                self.model = get_peft_model(self.model, self.lora_config, ds_name)
                 set_additional_trainable_modules(self.model, ds_name)
-                self.model.set_adapter(ds_name)
 
             self.train_lora(train_ds, eval_ds, lora_name=ds_name)
-            self.model.save_pretrained(f"{self.save_dir}")  # TODO check peft config with multiple loras
+            self.model.save_pretrained(f"{self.save_dir}")
             if not pefted:
                 self.loras.append(ds_name)
             previous_ds.append(ds_name)
             self.train_loras(ds=previous_ds)
             pefted = False
             self.load_model()
-
+        self.model.save_pretrained(f"{self.save_dir}")
         print("Training finished")
 
     def custom_train(self, trainer):
