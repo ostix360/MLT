@@ -5,6 +5,7 @@ from datasets import load_metric
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import get_scheduler
+import time
 
 
 def datasets_post_process(tokenized_dataset):
@@ -85,21 +86,41 @@ def train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, de
     progress_bar = tqdm(range(num_training_steps))
 
     model.train()
-    for epoch in range(num_epochs):
+    t_batch = []
+    t_forward = []
+    t_backward = []
+    t_step = []
+    for epoch in range(num_epochs):  # TODO add timer for each step of a training loop
         for batch in train_dataloader:
+            start = time.time()
             batch = {k: v.to(device) for k, v in batch.items()}
+            t_batch.append(time.time() - start)
+
+            start = time.time()
             output = model(**batch)
+            t_forward.append(time.time() - start)
+
+            start = time.time()
             loss = output.loss
             loss.backward()
+            t_backward.append(time.time() - start)
 
+            start = time.time()
             optimizer.step()
             lr_scheduler.step()
+            t_step.append(time.time() - start)
             optimizer.zero_grad()
             progress_bar.update(1)
+
+    print("Average time for batch: ", sum(t_batch) / len(t_batch))
+    print("Average time for forward: ", sum(t_forward) / len(t_forward))
+    print("Average time for backward: ", sum(t_backward) / len(t_backward))
+    print("Average time for step: ", sum(t_step) / len(t_step))
 
 
 def evaluate_model(model, eval_dataloader, device):
     metric = load_metric("accuracy")
+    progress_bar = tqdm(range(eval_dataloader.__len__()))
     model.eval()
     for batch in eval_dataloader:
         batch = {k: v.to(device) for k, v in batch.items()}
@@ -109,5 +130,6 @@ def evaluate_model(model, eval_dataloader, device):
         logits = outputs.logits
         predictions = torch.argmax(logits, dim=-1)
         metric.add_batch(predictions=predictions, references=batch["labels"])
+        progress_bar.update(1)
 
     return metric.compute()

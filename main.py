@@ -13,13 +13,13 @@ checkpoint = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
 
-sst2_datasets_t = load_dataset("sst2", split="train[:2%]")
-rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:8%]")
-imdb_datasets_t = load_dataset("imdb", split="train[:4%]")
+sst2_datasets_t = load_dataset("sst2", split="train[:20%]")
+rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:80%]")
+imdb_datasets_t = load_dataset("imdb", split="train[:20%]")
 
-sst2_datasets_v = load_dataset("sst2", split="validation[:5%]")
-rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:5%]")
-imdb_datasets_v = load_dataset("imdb", split="test[:2%]")
+sst2_datasets_v = load_dataset("sst2", split="validation[:25%]")
+rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:25%]")
+imdb_datasets_v = load_dataset("imdb", split="test[:10%]")
 
 
 def tokenize_function(examples):
@@ -56,6 +56,8 @@ training_args = TrainingArguments("./test_trainer",
                                   logging_steps=20,
                                   num_train_epochs=1,
                                   remove_unused_columns=False,
+                                  learning_rate=2e-5,
+                                  save_total_limit=1,
                                   per_device_train_batch_size=4,
                                   per_device_eval_batch_size=4,
                                   gradient_accumulation_steps=4,
@@ -69,7 +71,6 @@ lora_config = LoraConfig(
     lora_alpha=16,
     target_modules=TARGET_MODULES_MAPPING.get("bert"),
     lora_dropout=0.06,
-    modules_to_save=["classifier", "score"],
     bias="none",
     task_type=TaskType.SEQ_CLS,
 )
@@ -93,8 +94,8 @@ def train(model, train_dataloader, eval_dataloader):
     model.to(device)
     lr_scheduler, num_training_steps = utils.get_lr_scheduler(optimizer, train_dataloader, num_epochs)
     utils.train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
-    utils.evaluate_model(model, eval_dataloader, device)
+    print(utils.evaluate_model(model, eval_dataloader, device))
 
 
-trainer.custom_train(train)
-# trainer.train()
+# trainer.custom_train(train)
+trainer.train()

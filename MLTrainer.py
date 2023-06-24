@@ -62,6 +62,7 @@ class MLTrainer:
             self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora, is_trainable=train)
             if train:
                 unfreeze_adapter(self.model, lora)
+                set_additional_trainable_modules(self.model, lora)
             else:
                 _freeze_adapter(self.model, lora)
 
@@ -113,6 +114,7 @@ class MLTrainer:
             self.finetune()
             j = 1
         pefted = self.load_MLModel()
+
         for i in range(j, len(self.train_dataset)):
             ds_name = list(self.train_dataset.keys())[i]
             train_ds = self.train_dataset[ds_name]
