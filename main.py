@@ -4,6 +4,7 @@ from datasets import load_dataset
 from peft import LoraConfig, TaskType
 from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING as TARGET_MODULES_MAPPING
 from torch.optim import AdamW
+from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, TrainingArguments, DataCollatorWithPadding
 
 import utils
@@ -13,13 +14,13 @@ checkpoint = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
 
-sst2_datasets_t = load_dataset("sst2", split="train[:20%]")
-rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:80%]")
-imdb_datasets_t = load_dataset("imdb", split="train[:20%]")
+rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:100%]")
+sst2_datasets_t = load_dataset("sst2", split="train[:45%]")
+imdb_datasets_t = load_dataset("imdb", split="train[:6%]+train[92%:]")
 
+rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:100%]")
 sst2_datasets_v = load_dataset("sst2", split="validation[:25%]")
-rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:25%]")
-imdb_datasets_v = load_dataset("imdb", split="test[:10%]")
+imdb_datasets_v = load_dataset("imdb", split="test[:3%]+test[97%:]")
 
 
 def tokenize_function(examples):
@@ -34,7 +35,9 @@ def compute_metrics(eval_preds):
     metric = evaluate.load("accuracy")
     logits, labels = eval_preds
     predictions = np.argmax(logits, axis=-1)
-    return metric.compute(predictions=predictions, references=labels)
+    computed_metrics = metric.compute(predictions=predictions, references=labels)
+    print(computed_metrics)
+    return computed_metrics
 
 
 sst2_datasets_t = sst2_datasets_t.map(tokenize_function_sst2, batched=True)
@@ -45,18 +48,18 @@ sst2_datasets_v = sst2_datasets_v.map(tokenize_function_sst2, batched=True)
 rotten_tomatoes_datasets_v = rotten_tomatoes_datasets_v.map(tokenize_function, batched=True)
 imdb_datasets_v = imdb_datasets_v.map(tokenize_function, batched=True)
 
-train_ds = {"sst2": sst2_datasets_t.rename_column("label", "labels").remove_columns(["sentence", "idx"]),
-            "rotten_tomatoes": rotten_tomatoes_datasets_t.rename_column("label", "labels").remove_columns(["text"]),
+train_ds = {"rotten_tomatoes": rotten_tomatoes_datasets_t.rename_column("label", "labels").remove_columns(["text"]),
+            "sst2": sst2_datasets_t.rename_column("label", "labels").remove_columns(["sentence", "idx"]),
             "imdb": imdb_datasets_t.rename_column("label", "labels").remove_columns(["text"])}
-test_ds = {"sst2": sst2_datasets_v.rename_column("label", "labels").remove_columns(["sentence", "idx"]),
-           "rotten_tomatoes": rotten_tomatoes_datasets_v.rename_column("label", "labels").remove_columns(["text"]),
+test_ds = {"rotten_tomatoes": rotten_tomatoes_datasets_v.rename_column("label", "labels").remove_columns(["text"]),
+           "sst2": sst2_datasets_v.rename_column("label", "labels").remove_columns(["sentence", "idx"]),
            "imdb": imdb_datasets_v.rename_column("label", "labels").remove_columns(["text"])}
 
 training_args = TrainingArguments("./test_trainer",
                                   logging_steps=20,
                                   num_train_epochs=1,
                                   remove_unused_columns=False,
-                                  learning_rate=2e-5,
+                                  learning_rate=3e-5,
                                   save_total_limit=1,
                                   per_device_train_batch_size=4,
                                   per_device_eval_batch_size=4,
@@ -65,6 +68,24 @@ training_args = TrainingArguments("./test_trainer",
                                   optim="adafactor")
 
 data_collator = DataCollatorWithPadding(tokenizer)
+
+c_train_dataset = {
+    k: DataLoader(
+        v.shuffle(),
+        batch_size=training_args.per_device_eval_batch_size,
+        collate_fn=data_collator,
+    )
+    for k, v in train_ds.items()
+}
+
+c_eval_dataset = {
+    k: DataLoader(
+        v.shuffle(),
+        batch_size=training_args.per_device_eval_batch_size,
+        collate_fn=data_collator,
+    )
+    for k, v in test_ds.items()
+}
 
 lora_config = LoraConfig(
     r=8,
@@ -93,9 +114,8 @@ def train(model, train_dataloader, eval_dataloader):
     num_epochs = 1
     model.to(device)
     lr_scheduler, num_training_steps = utils.get_lr_scheduler(optimizer, train_dataloader, num_epochs)
-    utils.train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
+    # utils.train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
     print(utils.evaluate_model(model, eval_dataloader, device))
 
-
 # trainer.custom_train(train)
-trainer.train()
+# trainer.train()

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional, Callable, Dict, Tuple
 
 import torch
-from datasets import concatenate_datasets
+from datasets import concatenate_datasets, Dataset
 from peft import LoraConfig, PeftModel, prepare_model_for_int8_training, \
     MODEL_TYPE_TO_PEFT_MODEL_MAPPING, PromptLearningConfig
 from peft.utils.other import _freeze_adapter, _set_trainable, _get_submodules, ModulesToSaveWrapper
@@ -20,6 +20,7 @@ class MLTrainer:
                  data_collator: DataCollator,
                  tokenizer: PreTrainedTokenizerBase,
                  lora_config: LoraConfig,
+                 train_ratio: float = 0.8,
                  finetune_first: bool = False,
                  compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
                  optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
@@ -54,6 +55,7 @@ class MLTrainer:
         self.save_dir = self.training_args.output_dir
         self.compute_metrics = compute_metrics
         self.optimizers = optimizers
+        self.train_ratio = train_ratio
         self.c_eval_dataset = None
         self.c_train_dataset = None
 
@@ -74,10 +76,10 @@ class MLTrainer:
 
             else:
                 self.model.load_adapter(Path(f"{self.save_dir}/{self.loras[0]}"), self.loras[0])
-            set_additional_trainable_modules(self.model, self.loras[0])
+            # set_additional_trainable_modules(self.model, self.loras[0])
             for lora in self.loras[1:]:
                 self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora)
-                set_additional_trainable_modules(self.model, lora)
+                # set_additional_trainable_modules(self.model, lora)
         elif not isinstance(self.model, PeftModel):  # create useless Lora?
             lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
             self.model: PeftModel = get_peft_model(self.model, self.lora_config, lora_name)
@@ -87,7 +89,7 @@ class MLTrainer:
 
         return False
 
-    def finetune(self):  # TODO add removed dataset to train in train_loras
+    def finetune(self):
         print("Finetuning")
         train_ds = list(self.train_dataset.values())[0]
         eval_ds = list(self.eval_dataset.values())[0]
@@ -112,6 +114,7 @@ class MLTrainer:
         previous_ds = []
         if self.finetune_first:
             self.finetune()
+            previous_ds.append(list(self.train_dataset.keys())[0])
             j = 1
         pefted = self.load_MLModel()
 
@@ -204,10 +207,17 @@ class MLTrainer:
 
     def train_loras(self, ds, trainer=None):
         print("preparing datasets")
-        train_ds = concatenate_datasets([self.train_dataset[ds_name] for ds_name in ds])  # TODO Take a part
-        eval_ds = concatenate_datasets([self.eval_dataset[ds_name] for ds_name in ds])
-        train_ds.shuffle()
-        eval_ds.shuffle()
+        list_train_ds = []
+        list_eval_ds = []
+        for ds_name in ds:
+            index_to_cut = int(len(self.train_dataset[ds_name]) * self.train_ratio)
+            self.train_dataset[ds_name].shuffle()
+            self.eval_dataset[ds_name].shuffle()
+            list_train_ds.append(Dataset.from_dict(self.train_dataset[ds_name][:index_to_cut]))
+            list_eval_ds.append(Dataset.from_dict(self.eval_dataset[ds_name][:index_to_cut]))
+
+        train_ds = concatenate_datasets(list_train_ds)  # TODO Test if it works
+        eval_ds = concatenate_datasets(list_eval_ds)
         if trainer is not None:
             train_ds = DataLoader(
                 train_ds, batch_size=self.training_args.per_device_eval_batch_size, collate_fn=self.data_collator,
