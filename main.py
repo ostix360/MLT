@@ -12,15 +12,15 @@ from MLTrainer import MLTrainer
 
 checkpoint = "bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
+model = AutoModelForSequenceClassification.from_pretrained(checkpoint, return_dict=True)
 
-rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:100%]")
-sst2_datasets_t = load_dataset("sst2", split="train[:45%]")
-imdb_datasets_t = load_dataset("imdb", split="train[:6%]+train[92%:]")
+rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:100%]").shuffle()
+sst2_datasets_t = load_dataset("sst2", split="train[:45%]").shuffle()
+imdb_datasets_t = load_dataset("imdb", split="train[:6%]+train[92%:]").shuffle()
 
-rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:100%]")
-sst2_datasets_v = load_dataset("sst2", split="validation[:25%]")
-imdb_datasets_v = load_dataset("imdb", split="test[:3%]+test[97%:]")
+rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:100%]").shuffle()
+sst2_datasets_v = load_dataset("sst2", split="validation[:25%]").shuffle()
+imdb_datasets_v = load_dataset("imdb", split="test[:3%]+test[97%:]").shuffle()
 
 
 def tokenize_function(examples):
@@ -92,6 +92,7 @@ lora_config = LoraConfig(
     lora_alpha=16,
     target_modules=TARGET_MODULES_MAPPING.get("bert"),
     lora_dropout=0.06,
+    modules_to_save=["classifier","score"],
     bias="none",
     task_type=TaskType.SEQ_CLS,
 )
@@ -104,9 +105,10 @@ trainer = MLTrainer(model=model,
                     data_collator=data_collator,
                     tokenizer=tokenizer,
                     lora_config=lora_config,
-                    compute_metrics=compute_metrics, )
+                    compute_metrics=compute_metrics,
+                    train_ratio=0.5,)
 
-optimizer = AdamW(model.parameters(), lr=3e-5)
+optimizer = AdamW(model.parameters(), lr=4e-5)
 device = utils.get_device()
 
 

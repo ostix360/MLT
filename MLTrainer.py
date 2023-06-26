@@ -76,10 +76,10 @@ class MLTrainer:
 
             else:
                 self.model.load_adapter(Path(f"{self.save_dir}/{self.loras[0]}"), self.loras[0])
-            # set_additional_trainable_modules(self.model, self.loras[0])
+            set_additional_trainable_modules(self.model, self.loras[0])
             for lora in self.loras[1:]:
                 self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora)
-                # set_additional_trainable_modules(self.model, lora)
+                set_additional_trainable_modules(self.model, lora)
         elif not isinstance(self.model, PeftModel):  # create useless Lora?
             lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
             self.model: PeftModel = get_peft_model(self.model, self.lora_config, lora_name)
@@ -271,8 +271,7 @@ def set_additional_trainable_modules(model, lora_name):
             parent, target, target_name = _get_submodules(model, key)
             if isinstance(target, ModulesToSaveWrapper):
                 target.update(lora_name)
-
+            else:
+                setattr(parent, target_name, ModulesToSaveWrapper(target, lora_name))
             for param in target.parameters():
                 param.requires_grad = True
-            setattr(parent, target_name, ModulesToSaveWrapper(target, lora_name))
-
