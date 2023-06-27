@@ -10,7 +10,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trai
 import utils
 from MLTrainer import MLTrainer
 
-checkpoint = "./test_trainer"
+checkpoint = "bert_base_uncased"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForSequenceClassification.from_pretrained(checkpoint, return_dict=True)
 
@@ -66,26 +66,7 @@ training_args = TrainingArguments("./test_trainer",
                                   gradient_accumulation_steps=4,
                                   gradient_checkpointing=True,
                                   optim="adafactor")
-
 data_collator = DataCollatorWithPadding(tokenizer)
-
-c_train_dataset = {
-    k: DataLoader(
-        v.shuffle(),
-        batch_size=training_args.per_device_eval_batch_size,
-        collate_fn=data_collator,
-    )
-    for k, v in train_ds.items()
-}
-
-c_eval_dataset = {
-    k: DataLoader(
-        v.shuffle(),
-        batch_size=training_args.per_device_eval_batch_size,
-        collate_fn=data_collator,
-    )
-    for k, v in test_ds.items()
-}
 
 lora_config = LoraConfig(
     r=8,
@@ -105,7 +86,6 @@ trainer = MLTrainer(model=model,
                     data_collator=data_collator,
                     lora_config=lora_config,
                     tokenizer=tokenizer,
-                    loras=["sst2", "imdb"],  # load loras locally
                     compute_metrics=compute_metrics,
                     train_ratio=0.5, )
 
@@ -121,6 +101,45 @@ def train(model, train_dataloader, eval_dataloader):
     print(utils.evaluate_model(model, eval_dataloader, device))
 
 
+# trainer.custom_train(train)
+# trainer.train()
+
+
+eval_model = AutoModelForSequenceClassification.from_pretrained("./test_trainer", return_dict=True)
+
+c_train_dataset = {
+    k: DataLoader(
+        v.shuffle(),
+        batch_size=training_args.per_device_eval_batch_size,
+        collate_fn=data_collator,
+    )
+    for k, v in train_ds.items()
+}
+
+c_eval_dataset = {
+    k: DataLoader(
+        v.shuffle(),
+        batch_size=training_args.per_device_eval_batch_size,
+        collate_fn=data_collator,
+    )
+    for k, v in test_ds.items()
+}
+
+eval = MLTrainer(model=eval_model,
+                    finetune_first=False,
+                    training_args=training_args,
+                    train_datasets=train_ds,
+                    eval_datasets=test_ds,
+                    data_collator=data_collator,
+                    lora_config=lora_config,
+                    tokenizer=tokenizer,
+                    loras=["sst2", "imdb"],  # load loras locally
+                    compute_metrics=compute_metrics,
+                    train_ratio=0.5, )
+
+trainer.load_MLModel()  # load loras locally
+
+
 def accuracy(model,):
     model.to(device)
     print(utils.evaluate_model(model, c_eval_dataset["rotten_tomatoes"], device))
@@ -128,5 +147,5 @@ def accuracy(model,):
     print(utils.evaluate_model(model, c_eval_dataset["imdb"], device))
 
 
-# trainer.custom_train(train)
-# trainer.train()
+accuracy(trainer.model)
+
