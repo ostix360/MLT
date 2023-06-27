@@ -90,7 +90,7 @@ def train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, de
     t_forward = []
     t_backward = []
     t_step = []
-    for epoch in range(num_epochs):  # TODO add timer for each step of a training loop
+    for epoch in range(num_epochs):
         for batch in train_dataloader:
             start = time.time()
             batch = {k: v.to(device) for k, v in batch.items()}
@@ -119,7 +119,7 @@ def train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, de
 
 
 def evaluate_model(model, eval_dataloader, device):
-    metric = load_metric("accuracy")
+    metric = evaluate.load("accuracy")
     progress_bar = tqdm(range(eval_dataloader.__len__()))
     model.eval()
     for batch in eval_dataloader:

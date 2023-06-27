@@ -10,16 +10,16 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trai
 import utils
 from MLTrainer import MLTrainer
 
-checkpoint = "bert-base-uncased"
+checkpoint = "./test_trainer"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForSequenceClassification.from_pretrained(checkpoint, return_dict=True)
 
 rotten_tomatoes_datasets_t = load_dataset("rotten_tomatoes", split="train[:100%]").shuffle()
-sst2_datasets_t = load_dataset("sst2", split="train[:45%]").shuffle()
+sst2_datasets_t = load_dataset("sst2", split="train[:75%]").shuffle()
 imdb_datasets_t = load_dataset("imdb", split="train[:6%]+train[92%:]").shuffle()
 
 rotten_tomatoes_datasets_v = load_dataset("rotten_tomatoes", split="test[:100%]").shuffle()
-sst2_datasets_v = load_dataset("sst2", split="validation[:25%]").shuffle()
+sst2_datasets_v = load_dataset("sst2", split="validation[:50%]").shuffle()
 imdb_datasets_v = load_dataset("imdb", split="test[:3%]+test[97%:]").shuffle()
 
 
@@ -100,13 +100,14 @@ lora_config = LoraConfig(
 trainer = MLTrainer(model=model,
                     finetune_first=True,
                     training_args=training_args,
-                    train_dataset=train_ds,
-                    eval_dataset=test_ds,
+                    train_datasets=train_ds,
+                    eval_datasets=test_ds,
                     data_collator=data_collator,
                     tokenizer=tokenizer,
                     lora_config=lora_config,
+                    loras=["sst2", "imdb"],  # load loras locally
                     compute_metrics=compute_metrics,
-                    train_ratio=0.5,)
+                    train_ratio=0.5, )
 
 optimizer = AdamW(model.parameters(), lr=4e-5)
 device = utils.get_device()
@@ -118,6 +119,14 @@ def train(model, train_dataloader, eval_dataloader):
     lr_scheduler, num_training_steps = utils.get_lr_scheduler(optimizer, train_dataloader, num_epochs)
     # utils.train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
     print(utils.evaluate_model(model, eval_dataloader, device))
+
+
+def accuracy(model,):
+    model.to(device)
+    print(utils.evaluate_model(model, c_eval_dataset["rotten_tomatoes"], device))
+    print(utils.evaluate_model(model, c_eval_dataset["sst2"], device))
+    print(utils.evaluate_model(model, c_eval_dataset["imdb"], device))
+
 
 # trainer.custom_train(train)
 # trainer.train()
