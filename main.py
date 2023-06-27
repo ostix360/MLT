@@ -103,8 +103,8 @@ trainer = MLTrainer(model=model,
                     train_datasets=train_ds,
                     eval_datasets=test_ds,
                     data_collator=data_collator,
-                    tokenizer=tokenizer,
                     lora_config=lora_config,
+                    tokenizer=tokenizer,
                     loras=["sst2", "imdb"],  # load loras locally
                     compute_metrics=compute_metrics,
                     train_ratio=0.5, )

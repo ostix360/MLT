@@ -17,8 +17,13 @@ class MLTrainer:
 
     Example usage for train_datasets and eval_datasets (see below for more information):
         {"dataset_name": dataset, "dataset_name2": dataset2, ...}
+
+    train_datasets={"ds_a": train_dataset_a, "ds_b": train_dataset_b}
+    eval_datasets={"ds_a": eval_dataset_a, "ds_b": eval_dataset_b}
+
     The dataset name is used to identify the dataset and the lora adapter in the training loop
 
+    Raises: ValueError: If train_datasets and eval_datasets do not have the same keys. 
     """
 
     def __init__(self, model,
@@ -26,8 +31,8 @@ class MLTrainer:
                  eval_datasets: dict,
                  training_args: TrainingArguments,
                  data_collator: DataCollator,
-                 tokenizer: PreTrainedTokenizerBase,
                  lora_config: LoraConfig,
+                 tokenizer: PreTrainedTokenizerBase = None,
                  train_ratio: float = 0.8,
                  finetune_first: bool = False,
                  compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
@@ -35,8 +40,8 @@ class MLTrainer:
                  loras=None):
         """
         :param transformers.PreTrainedModel model: The model to train
-        :param dict train_datasets: a dict that contains the train datasets
-        :param dict eval_datasets: a dict that contains the eval datasets
+        :param dict train_datasets: Dictionary containing the training datasets
+        :param dict eval_datasets: Dictionary containing the evaluation datasets
         :param TrainingArguments training_args: training arguments needed even for a custom training loop
         :param DataCollator data_collator: Needed for a custom or none custom training loop
         :param tokenizer: Used only for the finetuning and the none custom training loop
@@ -63,12 +68,12 @@ class MLTrainer:
             raise TypeError("train_dataset must be a dict object")
         if not isinstance(eval_datasets, dict):
             raise TypeError("eval_dataset must be a dict object")
-        if not isinstance(tokenizer, PreTrainedTokenizerBase):
-            raise TypeError("tokenizer must be a PreTrainedTokenizerBase object")
         if not isinstance(lora_config, LoraConfig):
             raise TypeError("lora_config must be a LoraConfig object")
         if len(train_datasets) != len(eval_datasets):
             raise ValueError("train_dataset and eval_dataset must be of the same length")
+        if eval_datasets.keys() != train_datasets.keys():
+            raise ValueError("train_dataset and eval_dataset must have the same keys")
 
         self.model = model
         self.train_dataset = train_datasets
@@ -91,7 +96,7 @@ class MLTrainer:
         Load the adapters locally found in self.loras list
         And set them as trainable if train is True
         :param bool train: Set to True to set the adapters as trainable and False otherwise
-        :return: Nothing
+        :return: None
         """
         for lora in self.loras:
             self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora, is_trainable=train)
@@ -128,7 +133,7 @@ class MLTrainer:
         """
         Finetune the model with the first dataset using the transformer trainer
         And save the finetuned model
-        :return:
+        :return: None
         """
         print("Finetuning")
         train_ds = list(self.train_dataset.values())[0]
@@ -155,7 +160,7 @@ class MLTrainer:
         and save the finetuned model if needed
         And then create the Loras and train them with the transformer trainer
         Finally, save the model's adapters
-        :return: Nothing
+        :return: None
         """
 
         print("Starting training")
@@ -199,7 +204,7 @@ class MLTrainer:
                             and train the model
                             It's a custom training loop.
                             If null, the default transformer trainer is used
-        :return: Nothing
+        :return: None
         """
         print("Processing datasets")
         self.process_datasets()
@@ -233,7 +238,7 @@ class MLTrainer:
     def process_datasets(self):
         """
         Process the datasets to be used by the custom trainer
-        :return: Nothing
+        :return: None
         """
         self.c_train_dataset = {
             k: DataLoader(
@@ -264,7 +269,7 @@ class MLTrainer:
                             and train the model
                             It's a custom training loop.
                             If null, the default transformer trainer is used
-        :return: Nothing
+        :return: None
         """
         print(f"Training {lora_name}")
         self.model.print_trainable_parameters()
@@ -294,7 +299,7 @@ class MLTrainer:
                             and train the model
                             It's a custom training loop.
                             If null, the default transformer trainer is used
-        :return: Nothing
+        :return: None
         """
         print("preparing datasets")
         list_train_ds = []
@@ -358,12 +363,13 @@ def unfreeze_adapter(model, adapter_name):
 def set_additional_trainable_modules(model, lora_name):
     """
     Sets additional trainable modules for a given adapter.
+
     Useful for classification models
         classifier layer is added as trainable module for the adapter
         Necessary for training to avoid a torch error
     :param model: Model
     :param str lora_name: the lora adapter name to add
-    :return: Nothing
+    :return: None
     """
     key_list = [key for key, _ in model.named_modules()]
     for key in key_list:
