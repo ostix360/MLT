@@ -1,8 +1,10 @@
+[![CodeQL](https://github.com/ostix360/MLT/actions/workflows/codeql.yml/badge.svg?event=push)](https://github.com/ostix360/MLT/actions/workflows/codeql.yml)
+
 # Multiple Lora Training
 
 ## Introduction
 
-This is a project that demonstrates how to train multiple Lora and how it can be efficient.
+This project demonstrates how to train multiple Lora and how it can be efficient.
 
 
 
