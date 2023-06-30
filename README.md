@@ -60,7 +60,7 @@ The steps for training:
 
 Each step correspond to an epoch.
 
-Other models found in hub
+### Other models found in hub
 
 | Dataset  |                            rotten tomatoes                            |                       sst2                       |                               imdb                               |
 |:--------:|:---------------------------------------------------------------------:|:------------------------------------------------:|:----------------------------------------------------------------:|
@@ -69,13 +69,13 @@ Other models found in hub
 |  Epoch   |                                  1.0                                  |                       1.0                        |                               1.29                               |
 |   link   | [link](https://huggingface.co/flowfree/bert-finetuned-rottentomatoes) | [link](https://huggingface.co/ostix360/MLT-sst2) | [link](https://huggingface.co/fabriceyhc/bert-base-uncased-imdb) |
 
-The Model finetuned : 
-Accuracy and loss during training steps:
+### The Model finetuned : 
+
 
 | Steps |   1   |   2   |   3   |   4   |   5   |
 |:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|
 |  Acc  | 0.847 | 0.931 | 0.86  | 0.875 | 0.872 |
 | Loss  | 0.382 | 0.285 | 0.279 | 0.314 | 0.279 |
 
-
+Accuracy and loss during training steps
 
