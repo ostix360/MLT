@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from transformers import TrainingArguments, DataCollator, Trainer, EvalPrediction, \
     PreTrainedTokenizerBase
 
+from mlt import MLLoader
+
 
 class MLTrainer:
     """
@@ -113,15 +115,7 @@ class MLTrainer:
         :return: True if an untrained lora has been added to the model, False otherwise
         """
         if len(self.loras) > 0:
-            if not isinstance(self.model, PeftModel):
-                self.model: PeftModel = PeftModel.from_pretrained(self.model, Path(f"{self.save_dir}/{self.loras[0]}"),
-                                                       adapter_name=self.loras[0])
-            else:
-                self.model.load_adapter(Path(f"{self.save_dir}/{self.loras[0]}"), self.loras[0])
-            set_additional_trainable_modules(self.model, self.loras[0])
-            for lora in self.loras[1:]:
-                self.model.load_adapter(Path(f"{self.save_dir}/{lora}"), lora)
-                set_additional_trainable_modules(self.model, lora)
+            self.model = MLLoader.loadMLModel(self.model, self.loras, self.save_dir)
         elif not isinstance(self.model, PeftModel):  # create useless Lora?
             lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
             self.model: PeftModel = get_peft_model(self.model, self.lora_config, lora_name)
