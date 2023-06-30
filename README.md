@@ -73,11 +73,12 @@ Each step correspond to an epoch.
 
 ### The Model finetuned : 
 
+Accuracy and loss during training steps
 
 | Steps |   1   |   2   |   3   |   4   |   5   |
 |:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|
 |  Acc  | 0.847 | 0.931 | 0.86  | 0.875 | 0.872 |
 | Loss  | 0.382 | 0.285 | 0.279 | 0.314 | 0.279 |
 
-Accuracy and loss during training steps
+
 
