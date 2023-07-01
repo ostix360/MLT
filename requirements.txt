@@ -1,7 +1,7 @@
 evaluate
 numpy
 datasets
-peft~=0.3.0
+git+https://github.com/huggingface/peft.git
 torch
 transformers
 accelerate

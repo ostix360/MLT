@@ -11,6 +11,7 @@ from transformers import TrainingArguments, DataCollator, Trainer, EvalPredictio
     PreTrainedTokenizerBase
 
 from mlt import MLLoader
+from mlt.MLLoader import set_additional_trainable_modules
 
 
 class MLTrainer:
@@ -354,25 +355,3 @@ def unfreeze_adapter(model, adapter_name):
             p.requires_grad = True
 
 
-def set_additional_trainable_modules(model, lora_name):
-    """
-    Sets additional trainable modules for a given adapter.
-
-    Useful for classification models
-        classifier layer is added as trainable module for the adapter
-        Necessary for training to avoid a torch error
-    :param model: Model
-    :param str lora_name: the lora adapter name to add
-    :return: None
-    """
-    key_list = [key for key, _ in model.named_modules()]
-    for key in key_list:
-        target_module_found = any(key.endswith(target_key) for target_key in model.modules_to_save)
-        if target_module_found:
-            parent, target, target_name = _get_submodules(model, key)
-            if isinstance(target, ModulesToSaveWrapper):
-                target.update(lora_name)
-            else:
-                setattr(parent, target_name, ModulesToSaveWrapper(target, lora_name))
-            for param in target.parameters():
-                param.requires_grad = True
