@@ -1,8 +1,7 @@
 from pathlib import Path
 
 from peft import PeftModel
-
-
+from peft.utils import _get_submodules, ModulesToSaveWrapper
 
 
 def loadMLModel(model, loras: list, save_dir: str,):
@@ -41,6 +40,8 @@ def set_additional_trainable_modules(model, lora_name):
     :param str lora_name: the lora adapter name to add
     :return: None
     """
+    if model.modules_to_save is None:
+        return
     key_list = [key for key, _ in model.named_modules()]
     for key in key_list:
         target_module_found = any(key.endswith(target_key) for target_key in model.modules_to_save)
