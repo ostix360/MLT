@@ -40,6 +40,33 @@ pip install -r requirements.txt
 
 Create your python script and import the library
 
+import MLT and create the constructor of MLTrainer:
+
+```python
+from MLT import MLTrainer
+
+trainer = MLTrainer(model=model, # model to train
+                    finetune_first=True, # if True, the first training step will finetune the model with the first dataset
+                    training_args=training_args, # training args from transformers
+                    train_datasets=train_ds, # dict of datasets for training
+                    eval_datasets=test_ds, # dict of datasets for evaluation
+                    data_collator=data_collator, # data collator from transformers
+                    lora_config=lora_config, # lora config for all lora that will be trained
+                    tokenizer=tokenizer, # tokenizer from transformers
+                    compute_metrics=compute_metrics, # compute metrics for transformers' trainer
+                    loras=[], # list of lora pretrained that will be loaded and trained if their names are in the train_datasets
+                    optimizer=None, # optimizer for transformers' trainer
+                    train_ratio=0.5,    # 50% of the dataset will be used for the multiple lora training part
+                 )
+```
+
+Then train the model with the train method:
+
+```python
+trainer.train() # train the model
+# or
+trainer.custom_train(trainer=custom_loop) # train the model with custom training loop
+```
 
 Look at the [example](https://github.com/ostix360/MLT/blob/master/example.py) to see how to use the library.
 

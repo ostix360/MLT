@@ -4,8 +4,8 @@ from typing import Optional, Callable, Dict, Tuple
 import torch
 from datasets import concatenate_datasets, Dataset
 from peft import LoraConfig, PeftModel, MODEL_TYPE_TO_PEFT_MODEL_MAPPING, PromptLearningConfig
-from peft.utils.other import _freeze_adapter, _get_submodules, ModulesToSaveWrapper
 from peft.mapping import _prepare_prompt_learning_config
+from peft.utils.other import _freeze_adapter
 from torch.utils.data import DataLoader
 from transformers import TrainingArguments, DataCollator, Trainer, EvalPrediction, \
     PreTrainedTokenizerBase
@@ -74,9 +74,13 @@ class MLTrainer:
         if not isinstance(lora_config, LoraConfig):
             raise TypeError("lora_config must be a LoraConfig object")
         if len(train_datasets) != len(eval_datasets):
-            raise ValueError("train_dataset and eval_dataset must be of the same length")
+            raise ValueError("train_dataset and eval_dataset must be of the same length"
+                             "Actual length: " + str(len(train_datasets)) + " and " + str(len(eval_datasets)))
         if eval_datasets.keys() != train_datasets.keys():
             raise ValueError("train_dataset and eval_dataset must have the same keys")
+        if train_ratio > 1 or train_ratio < 0:
+            raise ValueError("train_ratio must be between 0 and 1"
+                             "Actual value: " + str(train_ratio))
 
         self.model = model
         self.train_dataset = train_datasets
@@ -117,6 +121,9 @@ class MLTrainer:
         """
         if len(self.loras) > 0:
             self.model = MLLoader.loadMLModel(self.model, self.loras, self.save_dir)
+            if next(iter(self.train_dataset)) == self.loras[-1]:
+                self.load_model(True)
+                return True
         elif not isinstance(self.model, PeftModel):  # create useless Lora?
             lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
             self.model: PeftModel = get_peft_model(self.model, self.lora_config, lora_name)
@@ -322,7 +329,7 @@ class MLTrainer:
         self.model.save_pretrained(f"{self.save_dir}")
 
 
-def get_peft_model(model, peft_config, adapter_name):
+def get_peft_model(model, peft_config, adapter_name: str):
     """
     Returns a Peft model object from a model and a config.
 
@@ -342,7 +349,7 @@ def get_peft_model(model, peft_config, adapter_name):
     return MODEL_TYPE_TO_PEFT_MODEL_MAPPING[peft_config.task_type](model, peft_config, adapter_name=adapter_name)
 
 
-def unfreeze_adapter(model, adapter_name):
+def unfreeze_adapter(model, adapter_name: str):
     """
     Unfreezes an adapter.
 
