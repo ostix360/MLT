@@ -155,46 +155,21 @@ class MLTrainer:
         trainer.save_model(f"{self.save_dir}")
         self.model.name_or_path = f"{self.save_dir}"    # Change the model's name to the link with it model's adapters
 
-    def train(self):
+    def prepare_train(self, i: int, lora_added: bool = False):
         """
-        Train function for MLTrainer
-        Starting by processing the datasets, then finetuning with the first dataset
-        and save the finetuned model if needed
-        And then create the Loras and train them with the transformer trainer
-        Finally, save the model's adapters
+        Prepare the datasets for training
         :return: None
         """
+        ds_name = list(self.train_dataset.keys())[i]
+        train_ds = self.train_dataset[ds_name]
+        eval_ds = self.eval_dataset[ds_name]
+        if not lora_added:
+            self.model.add_adapter(ds_name, self.lora_config)
+            set_additional_trainable_modules(self.model, ds_name)
+            self.model.set_adapter(ds_name)
+        return train_ds, eval_ds
 
-        print("Starting training")
-        j = 0
-        previous_ds = []
-        if self.finetune_first:
-            self.finetune()
-            previous_ds.append(list(self.train_dataset.keys())[0])
-            j = 1
-        lora_added = self.load_MLModel()
-
-        for i in range(j, len(self.train_dataset)):
-            ds_name = list(self.train_dataset.keys())[i]
-            train_ds = self.train_dataset[ds_name]
-            eval_ds = self.eval_dataset[ds_name]
-            if not lora_added:
-                self.model.add_adapter(ds_name, self.lora_config)
-                set_additional_trainable_modules(self.model, ds_name)
-                self.model.set_adapter(ds_name)
-
-            self.train_lora(train_ds, eval_ds, lora_name=ds_name)
-            self.model.save_pretrained(f"{self.save_dir}")
-            if not lora_added:
-                self.loras.append(ds_name)
-            previous_ds.append(ds_name)
-            self.train_loras(ds=previous_ds)
-            lora_added = False
-            self.load_model()
-
-        print("Training finished")
-
-    def custom_train(self, trainer):
+    def train(self, trainer=None):
         """
         Custom train function for MLTrainer
         Starting by processing the datasets, then finetuning with the first dataset
@@ -208,24 +183,22 @@ class MLTrainer:
                             If null, the default transformer trainer is used
         :return: None
         """
-        # print("Processing datasets")
-        # self.process_datasets()
         print("Starting training")
         j = 0
         previous_ds = []
+        for lora in self.loras:
+            if lora in self.train_dataset.keys():
+                previous_ds.append(lora)
         if self.finetune_first:
             self.finetune()
+            previous_ds.append(list(self.train_dataset.keys())[0])
             j = 1
-
         lora_added = self.load_MLModel()
         for i in range(j, len(self.train_dataset)):
             ds_name = list(self.train_dataset.keys())[i]
-            train_ds = self.train_dataset[ds_name]
-            eval_ds = self.eval_dataset[ds_name]
-            if not lora_added:
-                self.model.add_adapter(ds_name, self.lora_config)
-                set_additional_trainable_modules(self.model, ds_name)
-                self.model.set_adapter(ds_name)
+            if ds_name in previous_ds:
+                continue
+            train_ds, eval_ds = self.prepare_train(i, lora_added)
 
             self.train_lora(train_ds, eval_ds, lora_name=ds_name, trainer=trainer)
             self.model.save_pretrained(f"{self.save_dir}")
