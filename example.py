@@ -152,7 +152,7 @@ def train(model, train_dataset, eval_dataset):  # Custom training loop
     print(utils.evaluate_model(model, eval_ds, device))
 
 
-trainer.custom_train(train)  # Uncomment to train with custom training loop
+trainer.train(train)  # Uncomment to train with custom training loop
 # trainer.train()   # Uncomment to train with the transformers Trainer
 
 # Load the finetuned model
