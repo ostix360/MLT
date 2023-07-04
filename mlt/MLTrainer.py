@@ -203,25 +203,25 @@ class MLTrainer:
         And then create the Loras and train them with the custom trainer
         Finally, save the model's adapters
         :param func trainer: trainer is a function that takes a model, a train dataset and an eval dataset
-                            and train the model
+                            as parameters and train the model
                             It's a custom training loop.
                             If null, the default transformer trainer is used
         :return: None
         """
-        print("Processing datasets")
-        self.process_datasets()
+        # print("Processing datasets")
+        # self.process_datasets()
         print("Starting training")
         j = 0
         previous_ds = []
         if self.finetune_first:
             self.finetune()
             j = 1
-        print("Starting training")
+
         lora_added = self.load_MLModel()
         for i in range(j, len(self.train_dataset)):
             ds_name = list(self.train_dataset.keys())[i]
-            train_ds = self.c_train_dataset[ds_name]
-            eval_ds = self.c_eval_dataset[ds_name]
+            train_ds = self.train_dataset[ds_name]
+            eval_ds = self.eval_dataset[ds_name]
             if not lora_added:
                 self.model.add_adapter(ds_name, self.lora_config)
                 set_additional_trainable_modules(self.model, ds_name)
@@ -268,7 +268,7 @@ class MLTrainer:
         :param eval_ds: the dataset to use for evaluation
         :param lora_name: lora(s) to train
         :param func trainer: trainer is a function that takes a model, a train dataset and an eval dataset
-                            and train the model
+                            as parameters and train the model
                             It's a custom training loop.
                             If null, the default transformer trainer is used
         :return: None
@@ -298,7 +298,7 @@ class MLTrainer:
         Finally save the model
         :param list ds: all the datasets to use for training that are in the self.train_dataset and self.eval_dataset
         :param func trainer: trainer is a function that takes a model, a train dataset and an eval dataset
-                            and train the model
+                            as parameters and train the model
                             It's a custom training loop.
                             If null, the default transformer trainer is used
         :return: None
@@ -317,13 +317,6 @@ class MLTrainer:
         eval_ds = concatenate_datasets(list_eval_ds)
         train_ds.shuffle()
         eval_ds.shuffle()
-        if trainer is not None:
-            train_ds = DataLoader(
-                train_ds, batch_size=self.training_args.per_device_eval_batch_size, collate_fn=self.data_collator,
-            )
-            eval_ds = DataLoader(
-                eval_ds, batch_size=self.training_args.per_device_eval_batch_size, collate_fn=self.data_collator,
-            )
         self.load_model(train=True)
         self.train_lora(train_ds, eval_ds, " + ".join(ds), trainer=trainer)
         self.model.save_pretrained(f"{self.save_dir}")
