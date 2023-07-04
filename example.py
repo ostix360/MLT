@@ -69,7 +69,7 @@ def compute_metrics(eval_preds):
 # Training Arguments for each training part
 training_args = TrainingArguments("./test_trainer",
                                   logging_steps=20,
-                                  num_train_epochs=1,   # Each dataset will be trained for 1 epoch
+                                  num_train_epochs=1,  # Each dataset will be trained for 1 epoch
                                   remove_unused_columns=False,
                                   learning_rate=3e-5,
                                   save_total_limit=1,
@@ -88,7 +88,7 @@ lora_config = LoraConfig(
     lora_alpha=16,
     target_modules=TARGET_MODULES_MAPPING.get("bert"),
     lora_dropout=0.06,
-    modules_to_save=["classifier", "score"],    # Modules added because it's a model for sequence classification
+    modules_to_save=["classifier", "score"],  # Modules added because it's a model for sequence classification
     bias="none",
     task_type=TaskType.SEQ_CLS,
 )
@@ -103,7 +103,7 @@ trainer = MLTrainer(model=model,
                     lora_config=lora_config,
                     tokenizer=tokenizer,
                     compute_metrics=compute_metrics,
-                    train_ratio=0.5,    # 50% of the dataset will be used for the multiple lora training part
+                    train_ratio=0.5,  # 50% of the dataset will be used for the multiple lora training part
                     )
 
 # 1st training step it the finetuning step (finetune_first=True) with the rotten tomatoes dataset
@@ -127,15 +127,32 @@ optimizer = AdamW(model.parameters(), lr=4e-5)
 device = utils.get_device()
 
 
-def train(model, train_dataloader, eval_dataloader):    # Custom training loop
+def processDataset(train_dataset, eval_dataset):
+    c_train_dataset = DataLoader(
+        train_dataset,
+        batch_size=training_args.per_device_eval_batch_size,
+        collate_fn=data_collator,
+    )
+
+    c_eval_dataset = DataLoader(
+        eval_dataset,
+        batch_size=training_args.per_device_eval_batch_size,
+        collate_fn=data_collator,
+    )
+
+    return c_train_dataset, c_eval_dataset
+
+
+def train(model, train_dataset, eval_dataset):  # Custom training loop
     num_epochs = 1
+    training_ds, eval_ds = processDataset(train_dataset, eval_dataset)
     model.to(device)
-    lr_scheduler, num_training_steps = utils.get_lr_scheduler(optimizer, train_dataloader, num_epochs)
-    utils.train_model(model, train_dataloader, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
-    print(utils.evaluate_model(model, eval_dataloader, device))
+    lr_scheduler, num_training_steps = utils.get_lr_scheduler(optimizer, training_ds, num_epochs)
+    utils.train_model(model, training_ds, num_epochs, optimizer, lr_scheduler, device, num_training_steps)
+    print(utils.evaluate_model(model, eval_ds, device))
 
 
-# trainer.custom_train(train)   # Uncomment to train with custom training loop
+trainer.custom_train(train)  # Uncomment to train with custom training loop
 # trainer.train()   # Uncomment to train with the transformers Trainer
 
 # Load the finetuned model
@@ -159,13 +176,12 @@ c_eval_dataset = {
     for k, v in test_ds.items()
 }
 
-
 eval_MLmodel = MLLoader.loadMLModel(eval_model, ["sst2", "imdb"], "./test_trainer")  # load loras locally
 
 
 def accuracy(model, ):
     model.to(device)
-    print(utils.evaluate_model(model, c_eval_dataset["rotten_tomatoes"], device))   # 0.847 accuracy
+    print(utils.evaluate_model(model, c_eval_dataset["rotten_tomatoes"], device))  # 0.847 accuracy
     print(utils.evaluate_model(model, c_eval_dataset["sst2"], device))  # 0.931 accuracy
     print(utils.evaluate_model(model, c_eval_dataset["imdb"], device))  # 0.874 accuracy
 
