@@ -118,11 +118,11 @@ As the previous model the t5-small model is fine-tuned with MLT method.
 
 
 The table bellow shows the blue score and the loss of the model for each training step.
-The step 1 is the training of the de-en lora with the de-en dataset.
-The step 2 is the same but with 50% of the de-en dataset.
-The step 3 is the training of the en-de lora with the de-en dataset swapped (so en-de).
-The step 4 is the training of the de-en, en-de lora with 50% of the de-en and en-de datasets.
-And so on...
+- The step 1 is the training of the de-en lora with the de-en dataset.
+- The step 2 is the same but with 50% of the de-en dataset.
+- The step 3 is the training of the en-de lora with the de-en dataset swapped (so en-de).
+- The step 4 is the training of the de-en, en-de lora with 50% of the de-en and en-de datasets.
+- And so on...
 
 After the step 4 the model has 62M parameters.
 
