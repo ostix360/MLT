@@ -1,16 +1,14 @@
 import datasets
-import torch
+import evaluate
+import numpy as np
+import pycountry
 from datasets import load_dataset
 from peft import LoraConfig, TaskType
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, BitsAndBytesConfig
 from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING as TARGET_MODULES_MAPPING
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments
 from transformers import DataCollatorForSeq2Seq
-import numpy as np
-import evaluate
 from transformers import Seq2SeqTrainer
-import pycountry
 
-import utils
 from mlt.MLTrainer import MLTrainer
 
 checkpoint = "t5-small"
@@ -19,12 +17,13 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
 model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint, return_dict=True)
 
-ds_name_list = ['de-en', 'el-en', 'de-eo', 'en-eo', 'de-es', 'el-es', 'en-es', 'eo-es', 'en-fi',
-                'es-fi', 'de-fr', 'el-fr', 'en-fr', 'eo-fr', 'es-fr', 'fi-fr', 'ca-hu', 'de-hu', 'el-hu', 'en-hu',
-                'eo-hu', 'fr-hu', 'de-it', 'en-it', 'eo-it', 'es-it', 'fr-it', 'hu-it', 'ca-nl', 'de-nl', 'en-nl',
-                'es-nl', 'fr-nl', 'hu-nl', 'it-nl', 'en-no', 'es-no', 'fi-no', 'fr-no', 'hu-no', 'en-pl', 'fi-pl',
-                'fr-pl', 'hu-pl', 'de-pt', 'en-pt', 'eo-pt', 'es-pt', 'fr-pt', 'hu-pt', 'it-pt', 'de-ru', 'en-ru',
-                'es-ru', 'fr-ru', 'hu-ru', 'it-ru', 'en-sv', 'fr-sv', 'it-sv', 'ca-de', 'ca-en', ]
+ds_name_list = ['de-en', 'en-nl',
+                'de-es', 'en-es',
+                'de-fr', 'en-fr', 'es-fr',
+                'de-hu', 'en-hu',          'fr-hu',
+                'de-it', 'en-it', 'es-it', 'fr-it', 'hu-it',
+                'de-nl',          'es-nl', 'fr-nl', 'hu-nl',
+                'de-ru', 'en-ru', 'es-ru', 'fr-ru', 'hu-ru', 'it-ru', ]
 
 
 # ds_name_list = ['ca-de']
@@ -33,18 +32,32 @@ ds_name_list = ['de-en', 'el-en', 'de-eo', 'en-eo', 'de-es', 'el-es', 'en-es', '
 def load_all_subsets():
     ds_list = []
     for ds_name in ds_name_list:
-        ds_list.append(load_dataset("opus_books", ds_name))
+        ds_list.append(load_dataset("opus_books", ds_name, split="train[1:]"))
     return ds_list
 
 
 ds_list = load_all_subsets()
 
-max_length = 512
+max_length = 1024
 
 
 def preprocess_function(examples):
     prefix1 = list(examples["translation"][0].keys())[0]
     prefix2 = list(examples["translation"][0].keys())[1]
+    langs = prefix1 + "-" + prefix2
+    lang1, lang2 = language_codes_to_names(langs)
+    inputs = f"translate {lang1} to {lang2}: "
+    inputs = [inputs + ex[prefix1] for ex in examples["translation"]]
+    targets = [ex[prefix2] for ex in examples["translation"]]
+    model_inputs = tokenizer(
+        inputs, text_target=targets, max_length=max_length, truncation=True
+    )
+    return model_inputs
+
+
+def preprocess_function_swapped(examples):
+    prefix1 = list(examples["translation"][0].keys())[1]
+    prefix2 = list(examples["translation"][0].keys())[0]
     langs = prefix1 + "-" + prefix2
     lang1, lang2 = language_codes_to_names(langs)
     inputs = f"translate {lang1} to {lang2}: "
@@ -75,11 +88,17 @@ def language_codes_to_names(code: str):
 
 
 tokenized_datasets = []
+
 for ds in ds_list:
     tokenized_datasets.append(ds.map(
         preprocess_function,
         batched=True,
-        remove_columns=ds["train"].column_names,
+        remove_columns=ds.column_names,
+    ))
+    tokenized_datasets.append(ds.map(
+        preprocess_function_swapped,
+        batched=True,
+        remove_columns=ds.column_names,
     ))
 
 data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
@@ -114,11 +133,11 @@ args = Seq2SeqTrainingArguments(
     save_strategy="epoch",
     learning_rate=2e-4,
     per_device_train_batch_size=3,
-    per_device_eval_batch_size=6,
+    per_device_eval_batch_size=3,
     weight_decay=0.01,
     save_total_limit=2,
     num_train_epochs=1,
-    logging_steps=250,
+    logging_steps=500,
     predict_with_generate=True,
     fp16=True,
     optim="adafactor",
@@ -152,12 +171,22 @@ lora_config = LoraConfig(
 
 train_ds = {}
 test_ds = {}
+i = 0
 
-for i, ds_name in enumerate(ds_name_list):
-    t_ds = tokenized_datasets[i]["train"]
+for ds_name in ds_name_list:
+    lang1, lang2 = ds_name.split("-")
+    t_ds = tokenized_datasets[i]
     train_ds[ds_name] = t_ds
-    e_ds = t_ds[:250]
+    e_ds = t_ds[:200]
     test_ds[ds_name] = datasets.Dataset.from_dict(e_ds)
+    i += 1
+    ds_name = lang2 + "-" + lang1
+    t_ds = tokenized_datasets[i]
+    train_ds[ds_name] = t_ds
+    e_ds = t_ds[:200]
+    test_ds[ds_name] = datasets.Dataset.from_dict(e_ds)
+    i += 1
+
 
 trainer = MLTrainer(model=model,
                     finetune_first=False,
@@ -166,7 +195,7 @@ trainer = MLTrainer(model=model,
                     eval_datasets=test_ds,
                     data_collator=data_collator,
                     lora_config=lora_config,
-                    loras=['ca-de', 'ca-en', ],
+                    loras=["de-en", "en-de"],
                     tokenizer=tokenizer,
                     train_ratio=0.5,  # 50% of the dataset will be used for the multiple lora training part
                     )

@@ -121,9 +121,9 @@ class MLTrainer:
         """
         if len(self.loras) > 0:
             self.model = MLLoader.loadMLModel(self.model, self.loras, self.save_dir)
-            if next(iter(self.train_dataset)) == self.loras[-1]:
-                self.load_model(True)
-                return True
+            # if next(iter(self.train_dataset)) == self.loras[-1]:
+            #     self.load_model(True)
+            #     return True
         elif not isinstance(self.model, PeftModel):  # create useless Lora?
             lora_name = list(self.train_dataset.keys())[1 if self.finetune_first else 0]
             self.model: PeftModel = get_peft_model(self.model, self.lora_config, lora_name)

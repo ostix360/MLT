@@ -111,20 +111,25 @@ Accuracy and loss during training steps
 ### T5 translation fine-tunig
 
 Evaluation of the t5-small model trained on the entire opus books dataset.
+This model has only 60M parameters.
 
 As the previous model the t5-small model is fine-tuned with MLT method.
 
 
 
 The table bellow shows the blue score and the loss of the model for each training step.
-The step 1 is the training of the ca-de lora with the ca-de dataset.
-The step 2 is the same but with 30% of the ca-de dataset.
-The step 3 is the training of the ca-en lora with the ca-en dataset.
-The step 4 is the training of the ca-de, ca-en lora with 30% of the ca-de and ca-en datasets.
+The step 1 is the training of the de-en lora with the de-en dataset.
+The step 2 is the same but with 50% of the de-en dataset.
+The step 3 is the training of the en-de lora with the de-en dataset swapped (so en-de).
+The step 4 is the training of the de-en, en-de lora with 50% of the de-en and en-de datasets.
 And so on...
 
-|    Steps    | 1 ca-de | 2 mix (1) | 3 ca-en | 4 mix (2-3) |   5   |
+After the step 4 the model has 62M parameters.
+
+|    Steps    | 1 de-en | 2 mix (1) | 3 en-de | 4 mix (2-3) |   5   |
 |:-----------:|:-------:|:---------:|:-------:|:-----------:|:-----:|
-| Blue Before |  0.256  |   0.655   |  0.280  |    1.621    | 0.000 |
-| Blue After  |  0.655  |   0.753   |  2.975  |    1.491    | 0.000 |
-|    Loss     |  3.54   |   3.42    |  3.70   |    3.60     | 0.000 |
+| Blue Before |  0.582  |   7.433   | 10.785  |    7.868    | 0.000 |
+| Blue After  |  7.433  |  10.433   | 14.010  |    12.19    | 0.000 |
+|    Loss     |   3.1   |   2.99    |  2.41   |    2.75     | 0.000 |
+
+
