@@ -110,7 +110,7 @@ Accuracy and loss during training steps
 
 ### T5 translation fine-tunig
 
-Evaluation of the t5-small model trained on the entire opus books dataset.
+Evaluation of the t5-small model trained on the opus books dataset.
 This model has only 60M parameters.
 
 As the previous model the t5-small model is fine-tuned with MLT method.
@@ -118,18 +118,20 @@ As the previous model the t5-small model is fine-tuned with MLT method.
 
 
 The table bellow shows the blue score and the loss of the model for each training step.
-The step 1 is the training of the de-en lora with the de-en dataset.
-The step 2 is the same but with 50% of the de-en dataset.
-The step 3 is the training of the en-de lora with the de-en dataset swapped (so en-de).
-The step 4 is the training of the de-en, en-de lora with 50% of the de-en and en-de datasets.
-And so on...
+- The step 1 is the training of the de-en lora with the de-en dataset.
+- The step 2 is the same but with 50% of the de-en dataset.
+- The step 3 is the training of the en-de lora with the de-en dataset swapped (so en-de).
+- The step 4 is the training of the de-en, en-de lora with 50% of the de-en and en-de datasets.
+- And so on...
 
-After the step 4 the model has 62M parameters.
+After the step 4 the mix-up dataset is to 30%
 
-|    Steps    | 1 de-en | 2 mix (1) | 3 en-de | 4 mix (2-3) |   5   |
-|:-----------:|:-------:|:---------:|:-------:|:-----------:|:-----:|
-| Blue Before |  0.582  |   7.433   | 10.785  |    7.868    | 0.000 |
-| Blue After  |  7.433  |  10.433   | 14.010  |    12.19    | 0.000 |
-|    Loss     |   3.1   |   2.99    |  2.41   |    2.75     | 0.000 |
+After the step 9 the model has 66M parameters.
+
+|    Steps    | 1 de-en | 2 mix (1) | 3 en-de | 4 mix (2-3) | 5 de-fr | 6 mix (4-5) | 7 fr-de | 8 mix (6-7) | 9 en-fr |
+|:-----------:|:-------:|:---------:|:-------:|:-----------:|:-------:|:-----------:|:-------:|:-----------:|:-------:|
+| Blue Before |  0.582  |   7.433   | 10.785  |    7.868    |  0.326  |    4.301    |  0.517  |    4.259    | 16.307  |
+| Blue After  |  7.433  |  10.433   | 14.010  |    12.19    |  3.797  |    9.075    |  4.230  |    7.667    | 18.540  |
+|    Loss     |   3.1   |   2.99    |  2.41   |    2.75     |  2.54   |    2.78     |  2.94   |    2.88     |  1.90   |
 
 

@@ -17,13 +17,13 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
 model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint, return_dict=True)
 
-ds_name_list = ['de-en', 'en-nl',
-                'de-es', 'en-es',
-                'de-fr', 'en-fr', 'es-fr',
-                'de-hu', 'en-hu',          'fr-hu',
-                'de-it', 'en-it', 'es-it', 'fr-it', 'hu-it',
-                'de-nl',          'es-nl', 'fr-nl', 'hu-nl',
-                'de-ru', 'en-ru', 'es-ru', 'fr-ru', 'hu-ru', 'it-ru', ]
+ds_name_list = ['de-en', 'de-fr', 'en-fr', ]
+                # 'de-es', 'en-es',
+                # 'de-fr', 'en-fr', 'es-fr',
+                # 'de-hu', 'en-hu',          'fr-hu',
+                # 'de-it', 'en-it', 'es-it', 'fr-it', 'hu-it',
+                # 'de-nl', 'en-nl', 'es-nl', 'fr-nl', 'hu-nl',
+                # 'de-ru', 'en-ru', 'es-ru', 'fr-ru', 'hu-ru', 'it-ru', ]
 
 
 # ds_name_list = ['ca-de']
@@ -38,7 +38,7 @@ def load_all_subsets():
 
 ds_list = load_all_subsets()
 
-max_length = 1024
+max_length = 512
 
 
 def preprocess_function(examples):
@@ -101,7 +101,7 @@ for ds in ds_list:
         remove_columns=ds.column_names,
     ))
 
-data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
+data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, max_length=max_length)
 metric = evaluate.load("sacrebleu")
 
 
@@ -132,12 +132,11 @@ args = Seq2SeqTrainingArguments(
     evaluation_strategy="no",
     save_strategy="epoch",
     learning_rate=2e-4,
-    per_device_train_batch_size=3,
-    per_device_eval_batch_size=3,
-    weight_decay=0.01,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=12,
     save_total_limit=2,
     num_train_epochs=1,
-    logging_steps=500,
+    logging_steps=1500,
     predict_with_generate=True,
     fp16=True,
     optim="adafactor",
@@ -197,7 +196,7 @@ trainer = MLTrainer(model=model,
                     lora_config=lora_config,
                     loras=["de-en", "en-de"],
                     tokenizer=tokenizer,
-                    train_ratio=0.5,  # 50% of the dataset will be used for the multiple lora training part
+                    train_ratio=0.3,  # 30% of the dataset will be used for the multiple lora training part
                     )
 
 trainer.train(train)
